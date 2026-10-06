@@ -1,0 +1,25 @@
+{
+  "media": {
+    "demanda_kwh": 2879157.6506435513,
+    "precio_bolsa_cop_kwh": 5.815399497919,
+    "precio_contrato_cop_kwh": 282.50396504112825,
+    "aportes_kwh_d1": 19.01555444723617,
+    "aportes_media7_kwh_d1": 19.026071206964907,
+    "volumen_util_kwh_d1": 11468876584.548464,
+    "volumen_util_delta7_kwh_d1": 4509341.361702127
+  },
+  "desv": {
+    "demanda_kwh": 261559.11831084173,
+    "precio_bolsa_cop_kwh": 0.7917039126583899,
+    "precio_contrato_cop_kwh": 19.32224413781044,
+    "aportes_kwh_d1": 0.5024688527518955,
+    "aportes_media7_kwh_d1": 0.477664235570516,
+    "volumen_util_kwh_d1": 2509446546.146564,
+    "volumen_util_delta7_kwh_d1": 371243837.9371137
+  },
+  "log": [
+    "precio_bolsa_cop_kwh",
+    "aportes_kwh_d1",
+    "aportes_media7_kwh_d1"
+  ]
+}
