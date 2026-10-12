@@ -296,9 +296,9 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 ## Validación (julio a diciembre de 2025)
 
 | Red | MAE demanda [kWh] | MAPE demanda [%] | R² demanda | MAE precio [COP/kWh] | MAPE precio [%] | R² precio |
-|---|---|---|---|---|---|---|
+|---|---:|---:|---:|---:|---:|---:|
 | RNN | 67.180 | 2,24 | 0,87 | 78,8 | 37,21 | 0,32 |
-| TCN | | | | | | |
+| TCN | 73.763 | 2,49 | 0,86 | 57,6 | 27,30 | 0,56 |
 | GRU | | | | | | |
 | LSTM | | | | | | |
 | Transformer | | | | | | |
