@@ -6,6 +6,7 @@ venv/
 .ipynb_checkpoints/
 .quarto/
 guia_proyecto_files/
+guia_fase2_files/
 
 data/interim/*.csv
 data/processed/*.csv

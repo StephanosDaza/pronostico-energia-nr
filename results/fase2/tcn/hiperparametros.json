@@ -1,0 +1,16 @@
+{
+  "canales": 32,
+  "kernel": 3,
+  "niveles": 6,
+  "dropout": 0.1,
+  "cabeza": 64,
+  "optimizador": "adam",
+  "lr": 0.001,
+  "epocas": 50,
+  "batch": 256,
+  "paciencia": 8,
+  "clip": 1.0,
+  "parametros": 40098,
+  "mejor_epoca": 2,
+  "epocas_entrenadas": 10
+}

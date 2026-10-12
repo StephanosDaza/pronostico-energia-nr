@@ -33,14 +33,14 @@ En la fase 2 cada uno de nosotros construye, entrena y evalúa una red neuronal 
 | Arquitectura | Responsable | Cuaderno | Estado |
 |---|---|---|---|
 | RNN simple | Esteban | `01_rnn.ipynb` | **Entrenada** |
-| TCN | Sara | `02_tcn.ipynb` | En curso |
+| TCN | Sara | `02_tcn.ipynb` | **Entrenada** |
 | GRU | Isabel | `03_gru.ipynb` | Por hacer |
 | LSTM | Kevin | `04_lstm.ipynb` | Por hacer |
-| Transformer | Stiven | `05_transformer.ipynb` | Por hacer |
+| Transformer | Stiven | `05_transformer.ipynb` | En curso |
 
 La RNN fue la primera, y con ella dejamos montado todo lo que las demás redes comparten: el ciclo de entrenamiento, la evaluación, el guardado de resultados y las figuras. Esta guía explica esas piezas, muestra cómo quedó la RNN y resume lo que cada uno tiene que tener en cuenta para hacer su red. La guía de la fase 1 (`guia_proyecto.html`) sigue siendo la referencia para los datos, el pipeline y las líneas base.
 
-En pocas palabras, la RNN pronostica muy bien la demanda (MAPE de 2,24 % en validación, contra 3,83 % del mejor naive) pero todavía no le gana al naive diario en el precio (37,2 % contra 20,3 %). Los detalles están en la sección [-@sec-resultados].
+En pocas palabras, la RNN pronostica muy bien la demanda (MAPE de 2,24 % en validación, contra 3,83 % del mejor naive) pero todavía no le gana al naive diario en el precio (37,2 % contra 20,3 %). La TCN es un poco menos precisa en demanda (2,49 %), pero en precio baja el error a 27,4 % y es la primera red que supera al naive diario en RMSE y R² del precio. Los detalles están en las secciones [-@sec-resultados] y [-@sec-resultados-tcn].
 
 # Cómo está organizada la fase 2 {#sec-organizacion}
 
@@ -216,7 +216,7 @@ HIPERPARAMETROS = {"oculto": 64, "capas": 2, "dropout": 0.1, "cabeza": 128}
 ## Limitaciones conocidas
 
 - **Gradiente que se desvanece.** Al propagar el error hacia atrás por 168 pasos con tanh, el gradiente se va haciendo cada vez más pequeño y a la red le cuesta aprender relaciones con horas lejanas. Es precisamente el problema que resuelven la LSTM y la GRU con sus compuertas, así que la comparación con ellas va a ser interesante.
-- **Es lenta.** Para calcular el estado de la hora 100 hay que haber terminado la hora 99, así que las 168 horas se procesan en fila y no se pueden repartir en paralelo. La TCN y el Transformer procesan todas las horas al mismo tiempo y por eso entrenan mucho más rápido.
+- **Procesa la semana en fila.** Para calcular el estado de la hora 100 hay que haber terminado la hora 99, así que las 168 horas no se pueden repartir en paralelo. La TCN sí procesa todas las horas al mismo tiempo, aunque en nuestros computadores, sin GPU, eso no se tradujo en un entrenamiento más corto (sección [-@sec-resultados-tcn]).
 
 # Resultados de la RNN {#sec-resultados}
 
@@ -279,13 +279,144 @@ En el **precio** se ven dos problemas:
 
 La RNN aprende bien la demanda, que es una serie regular, con ciclos claros y muy marcada por el calendario. El precio es otra historia: se mueve por saltos y cambios de régimen, y copiar el día anterior resulta difícil de superar. Esto pasa mucho en mercados eléctricos y es un resultado que vale la pena discutir en el informe.
 
-Es importante recordar que esta RNN tiene los hiperparámetros por defecto y no se afinó. No la vamos a ajustar en esta fase: primero vemos cómo les va a las otras cuatro. Para el precio, las que más prometen son la TCN y el Transformer, que suelen captar mejor los saltos, y la LSTM y la GRU, que recuerdan mejor lo que pasó hace muchas horas.
+Es importante recordar que esta RNN tiene los hiperparámetros por defecto y no se afinó. No la vamos a ajustar en esta fase: primero vemos cómo les va a las otras cuatro. Para el precio, la LSTM y la GRU podrían ayudar porque recuerdan mejor lo que pasó hace muchas horas.
+
+# La arquitectura TCN {#sec-tcn}
+
+## Cómo funciona una TCN
+
+Una red convolucional temporal (TCN) lee la semana con filtros que se deslizan sobre el tiempo, en lugar de recorrerla hora por hora como la RNN. Tiene dos ingredientes:
+
+- **Convoluciones causales.** El filtro que calcula la salida de la hora $t$ solo mira la hora $t$ y las anteriores, nunca las siguientes. Así la red no puede usar información del futuro.
+- **Dilataciones.** En cada nivel el filtro salta más horas: en el primero mira horas seguidas, en el segundo cada 2 horas, luego cada 4, y así. Con pocas capas, cada salida termina viendo cientos de horas hacia atrás.
+
+Con un filtro de tamaño $k$, dos convoluciones por bloque y dilataciones $d_1, \dots, d_L$, el campo receptivo, es decir, cuántas horas hacia atrás alcanza a ver cada salida, es:
+
+$$
+R = 1 + 2\,(k-1)\sum_{i=1}^{L} d_i
+$$
+
+Con $k = 3$ y dilataciones 1, 2, 4, 8, 16 y 32, queda $R = 1 + 4 \cdot 63 = 253$ horas, más que las 168 de la ventana. La última salida ve la semana completa.
+
+## Versiones evaluadas
+
+Antes de fijar la arquitectura se evaluaron cuatro formas de pasar de lo que la TCN aprende de la semana al pronóstico de mañana. La parte convolucional fue la misma en las cuatro; lo que cambió fue la salida. Estas pruebas se hicieron con un ciclo de entrenamiento preliminar (40 épocas y paciencia de 6), así que los valores sirven para comparar las versiones entre sí y no con las demás redes.
+
+| Versión | Qué usa para pronosticar cada hora de mañana | MAPE precio val (aprox.) |
+|---|---|---|
+| v1 | Un solo resumen de toda la semana: la salida de la TCN en la última hora, repetida para las 24 | 36 % |
+| v2 | La salida de la TCN en la misma hora de ayer | 30 % |
+| v3 | Lo de la v2 más los valores reales de la misma hora de ayer | 28 % |
+| v4 | El naive (misma hora de la semana pasada para la demanda y de ayer para el precio) más una corrección aprendida por la red | 26 % |
+
+La v1 hace lo mismo que nuestra RNN, resumir la semana en un solo vector, y su error de precio quedó casi igual al de la RNN (37 %). El salto grande vino en la v2, cuando cada hora de mañana pasó a mirar la misma hora de ayer: es la misma lógica del naive diario, pero aprendida por la red. Ahí está buena parte de la explicación de por qué a la RNN le va mal en el precio.
+
+Se escogió la **v3**, que tuvo la menor pérdida de validación. La v4 dio los mejores MAPE, pero incorpora la línea base dentro del modelo, por lo que se dejó como experimento aparte. La v3 es la que quedó en `modelos/tcn.py` y la que se entrenó con la configuración común.
+
+## Planteamiento TCN
+
+```{mermaid}
+flowchart TD
+    P["pasado<br/>(lote, 168, 16)"] --> T["6 bloques residuales<br/>convoluciones causales<br/>dilataciones 1 a 32 · 32 canales"]
+    T --> U["salida de las últimas 24 horas<br/>(lote, 24, 32)"]
+    P --> A["valores reales de las últimas 24 horas<br/>(lote, 24, 16)"]
+    F["futuro<br/>(lote, 24, 9)"] --> C
+    U --> C["concatenar por hora<br/>(lote, 24, 57)"]
+    A --> C
+    C --> D["Densa 64 + ReLU + Dropout 0,1<br/>(la misma para las 24 horas)"]
+    D --> S["Densa 2<br/>(lote, 24, 2)"]
+```
+
+1. **Codificador convolucional.** Seis bloques residuales. Cada bloque tiene dos convoluciones causales de 32 canales, con ReLU y *dropout* de 0,1, y un atajo que suma la entrada a la salida para que la red profunda entrene bien. La dilatación se duplica en cada bloque: 1, 2, 4, 8, 16 y 32.
+2. **Correspondencia con ayer.** De la salida de la TCN se toman las últimas 24 horas. La hora $h$ de mañana queda emparejada con la hora $h$ de ayer.
+3. **Valores reales de ayer.** A cada hora se le pegan también los 16 valores originales de esa misma hora de ayer, sin pasar por las convoluciones, para que la red no pierda el dato exacto del precio y la demanda.
+4. **Calendario de mañana.** Se agregan las 9 variables de calendario de cada hora a pronosticar.
+5. **Cabeza densa compartida.** Una misma red de 64 neuronas procesa cada una de las 24 horas y entrega sus 2 salidas.
+
+| Bloque | Parámetros |
+|---|---|
+| Bloque 1 (16 → 32 canales, con atajo de 1 × 1) | 5.216 |
+| Bloques 2 a 6 (32 → 32 canales, 6.208 cada uno) | 31.040 |
+| Densa 57 → 64 | 3.712 |
+| Densa 64 → 2 | 130 |
+| **Total** | **40.098** |
+
+Los hiperparámetros por defecto están en `tcn.HIPERPARAMETROS`:
+
+```python
+HIPERPARAMETROS = {"canales": 32, "kernel": 3, "niveles": 6, "dropout": 0.1, "cabeza": 64}
+```
+
+Tiene menos parámetros que la RNN (40.098 frente a 55.728), porque la cabeza se comparte entre las 24 horas en lugar de tener una salida distinta para cada una.
+
+# Resultados de la TCN {#sec-resultados-tcn}
+
+## Entrenamiento
+
+| | |
+|---|---|
+| Dispositivo | CPU (PyTorch 2.5.1) |
+| Épocas entrenadas | 10 (paró por *early stopping*) |
+| Mejor época | 2 |
+| Mejor pérdida de validación | 0,1545 |
+| Pérdida de entrenamiento en la mejor época | 0,1031 |
+| Tiempo total | unos 43 minutos (entre 200 y 315 s por época) |
+
+![Pérdida por época de la TCN. La línea punteada marca la mejor época.](reports/figuras/f2_02_tcn_curvas.png)
+
+La TCN alcanzó su mejor validación muy temprano, en la segunda época, con 0,1545, bastante por debajo del 0,1940 de la RNN. Desde la tercera época el entrenamiento siguió bajando hasta 0,054 mientras la validación subía hasta 0,22: sobreajusta rápido. Es un dato útil para la fase 3, porque sugiere probar más *dropout* o una tasa de aprendizaje más baja.
+
+En la primera época la validación quedó por debajo del entrenamiento. Pasa porque la pérdida de entrenamiento es el promedio de toda la época, incluidos los primeros lotes en los que la red todavía no sabía nada, y además se calcula con *dropout* activo.
+
+Cada época tardó más que en la RNN. En teoría la TCN es más paralelizable, pero en CPU las convoluciones sobre 168 horas con 32 canales también son costosas, y aquí no hubo GPU para aprovechar ese paralelismo. Al final tardó menos en total porque necesitó menos épocas.
+
+## Métricas
+
+| Modelo | Partición | MAE demanda [kWh] | MAPE demanda [%] | R² demanda | MAE precio [COP/kWh] | MAPE precio [%] | RMSE precio [COP/kWh] | R² precio |
+|---|---|---|---|---|---|---|---|---|
+| **TCN** | val | **73.563** | **2,49** | **0,86** | 57,7 | 27,43 | **102,1** | **0,56** |
+| Naive $m=168$ | val | 111.762 | 3,83 | 0,54 | 81,7 | 37,45 | 136,1 | 0,22 |
+| Naive $m=24$ | val | 194.136 | 6,72 | −0,08 | **48,5** | **20,34** | 111,8 | 0,48 |
+| **TCN** | test | **83.670** | **2,74** | **0,86** | 83,1 | 20,68 | 123,3 | 0,85 |
+| Naive $m=168$ | test | 121.129 | 4,06 | 0,49 | 126,5 | 34,67 | 182,2 | 0,68 |
+| Naive $m=24$ | test | 194.817 | 6,67 | 0,07 | **56,1** | **14,86** | **111,1** | **0,88** |
+
+- **Demanda: cumple.** El MAPE baja de 3,83 % a 2,49 % en validación y de 4,06 % a 2,74 % en prueba. Queda un poco por detrás de la RNN (2,24 % y 2,70 %).
+- **Precio: no cumple la meta en MAPE, pero mejora mucho frente a la RNN.** En validación pasa de 37,2 % (RNN) a 27,4 %, y en prueba de 29,1 % a 20,7 %. Todavía no le gana al naive diario en MAPE ni en MAE.
+- **En RMSE y R² del precio sí le gana al naive diario en validación** (102,1 frente a 111,8, y 0,56 frente a 0,48). Como el RMSE castiga más los errores grandes, esto dice que la TCN se equivoca menos que el naive cuando hay picos, aunque en los días normales todavía se aleja un poco más del valor real.
+
+## Pronóstico contra lo observado
+
+![Primeros 14 días de validación (julio de 2025).](reports/figuras/f2_02_tcn_pronostico_val.png)
+
+![Primeros 14 días de prueba (enero de 2026).](reports/figuras/f2_02_tcn_pronostico_test.png)
+
+En la **demanda**, el comportamiento es muy parecido al de la RNN: sigue bien el ciclo diario y las caídas de los domingos, aunque en algunos días laborales se queda un poco corta en los máximos.
+
+En el **precio** se nota la diferencia con la RNN:
+
+- **Reacciona a los picos.** En validación ya no pronostica una línea plana: en varios de los picos de julio sube a 300–420 COP/kWh, aunque no alcanza los 800 reales.
+- **Sigue la forma del día.** Los escalones del precio aparecen en el pronóstico con la forma correcta, porque cada hora mira la misma hora de ayer.
+- **Todavía sobreestima cuando el precio cae de golpe.** En enero de 2026, cuando el precio baja a 100–250 COP/kWh, la TCN se queda por encima, aunque menos que la RNN.
+
+## Error por hora del día
+
+![MAE por hora del día en validación, TCN contra los dos naive.](reports/figuras/f2_02_tcn_error_por_hora.png)
+
+- En **demanda**, la TCN tiene menos error que los dos naive en todas las horas.
+- En **precio**, la TCN queda entre los dos naive: siempre por debajo del semanal y cerca del diario. En las horas de la tarde y la noche (17:00 a 21:00), donde están los picos, prácticamente lo iguala.
+
+## Conclusión TCN
+
+La TCN confirma lo que habían sugerido las versiones evaluadas: lo que más ayuda con el precio no es el tipo de capa, sino conectar cada hora de mañana con la misma hora de ayer. Con eso, la TCN pronostica la demanda casi tan bien como la RNN y el precio bastante mejor, y es la primera red que le gana al naive diario en alguna métrica del precio (RMSE y R² en validación).
+
+También sobreajusta muy rápido: la mejor época fue la segunda. Si la TCN pasa a la fase 3, lo primero sería regularizarla más.
 
 # Regla a tener en cuenta para que los modelos sean comparables {#sec-reglas}
 
 1. **Los datos se cargan con `cargar_datos_modelo()`** y no se cambian la ventana, el horizonte, las particiones ni el escalado.
 2. **Se entrena y se predice con las funciones de `energia.entrenamiento`**: `entrenar`, `predecir` y `guardar_resultados`. Nada de ciclos de entrenamiento propios.
-3. **`HP_ENTRENAMIENTO` se deja igual que en la RNN**: Adam, `lr=1e-3`, 50 épocas, lote de 256, paciencia de 8 y recorte de gradiente en 1. Lo que cada uno ajusta es `HP_MODELO`, es decir, el tamaño y la forma de su red. Si una red de verdad no aprende con esta configuración (pasa a veces con el Transformer), se puede bajar el `lr`, y el cambio queda registrado en `hiperparametros.json`.
+3. **`HP_ENTRENAMIENTO` se deja igual que en la RNN**: Adam, `lr=1e-3`, 50 épocas, lote de 256, paciencia de 8 y recorte de gradiente en 1. Lo que cada uno ajusta es `HP_MODELO`, es decir, el tamaño y la forma de su red. Si una red de verdad no aprende con esta configuración, se puede bajar el `lr`, y el cambio queda registrado en `hiperparametros.json`.
 4. **No se modifican los archivos comunes** (`config.py`, `dataset.py`, `metricas.py`, `entrenamiento.py`, `visualizacion.py`).
 5. **Las decisiones se toman con validación.** La prueba se reporta, pero no se mira para escoger hiperparámetros.
 
@@ -296,9 +427,9 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 ## Validación (julio a diciembre de 2025)
 
 | Red | MAE demanda [kWh] | MAPE demanda [%] | R² demanda | MAE precio [COP/kWh] | MAPE precio [%] | R² precio |
-|---|---:|---:|---:|---:|---:|---:|
+|---|---|---|---|---|---|---|
 | RNN | 67.180 | 2,24 | 0,87 | 78,8 | 37,21 | 0,32 |
-| TCN | 73.763 | 2,49 | 0,86 | 57,6 | 27,30 | 0,56 |
+| TCN | 73.563 | 2,49 | 0,86 | 57,7 | 27,43 | 0,56 |
 | GRU | | | | | | |
 | LSTM | | | | | | |
 | Transformer | | | | | | |
@@ -310,7 +441,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 | Red | MAE demanda [kWh] | MAPE demanda [%] | R² demanda | MAE precio [COP/kWh] | MAPE precio [%] | R² precio |
 |---|---|---|---|---|---|---|
 | RNN | 82.929 | 2,70 | 0,86 | 127,5 | 29,08 | 0,69 |
-| TCN | | | | | | |
+| TCN | 83.670 | 2,74 | 0,86 | 83,1 | 20,68 | 0,85 |
 | GRU | | | | | | |
 | LSTM | | | | | | |
 | Transformer | | | | | | |
@@ -322,12 +453,23 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 | Red | Mejor época | Épocas entrenadas | Parámetros | Tiempo |
 |---|---|---|---|---|
 | RNN | 13 | 21 | 55.728 | ~59 min (CPU) |
-| TCN | | | | |
+| TCN | 2 | 10 | 40.098 | ~43 min (CPU) |
 | GRU | | | | |
 | LSTM | | | | |
 | Transformer | | | | |
 
-Con estas tablas, las curvas de aprendizaje y las figuras de pronóstico escogemos las dos redes que pasan a la fase 3.
+Con estas tablas, las curvas de aprendizaje y las figuras de pronóstico escogemos las dos redes que pasan a la fase 3, siguiendo el criterio de la sección [-@sec-criterio].
+
+# Criterio de selección para la fase 3 {#sec-criterio}
+
+El criterio se fija antes de tener los resultados de las cinco redes, para que la elección no dependa de cuál termina gustándonos más. Se aplica en este orden:
+
+1. **Requisito mínimo: superar la línea base de demanda.** La red debe tener un MAPE de demanda en validación menor a 3,83 %, el del naive semanal. Una red que no cumpla esto no pasa, sin importar cómo le vaya en el precio.
+2. **Criterio principal: MAPE de precio en validación.** Entre las redes que cumplen el requisito, pasan las dos con menor MAPE de precio. Es la serie donde las redes más se diferencian: en demanda todas quedan muy cerca entre sí, mientras que en el precio las diferencias son de varios puntos.
+3. **Desempate: MAPE de demanda en validación.** Si dos redes quedan a menos de 1 punto de diferencia en el MAPE de precio, se considera empate y pasa la de menor MAPE de demanda.
+4. **La prueba no se usa para escoger.** Las métricas de prueba se reportan para confirmar que la elección se sostiene con datos de 2026, pero no cambian el resultado. Si una red escogida se comporta mucho peor en prueba que en validación, se reporta y se discute, pero no se reemplaza.
+
+Como información complementaria, y no como criterio, se reportan también el RMSE y el R² del precio, que muestran qué tan bien maneja cada red los picos, y el tiempo de entrenamiento, que pesa en la fase 3 porque ahí cada red se va a entrenar muchas veces.
 
 # Referencias
 
