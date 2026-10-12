@@ -10,6 +10,8 @@ RAW = DATA / "raw"
 INTERIM = DATA / "interim"
 PROCESSED = DATA / "processed"
 FIGURAS = RAIZ / "reports" / "figuras"
+RESULTADOS = RAIZ / "results"
+MODELOS = RESULTADOS / "modelos"
 
 ARCHIVO_HORARIO = INTERIM / "dataset_horario.parquet"
 ARCHIVO_FEATURES = PROCESSED / "dataset_features.parquet"

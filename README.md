@@ -4,9 +4,9 @@ Proyecto del curso Optimización e Inteligencia Artificial (UNAL, 2026).
 
 Pronóstico horario, para las 24 horas del día siguiente, de la demanda de energía de usuarios no regulados y del precio de bolsa nacional, con datos de XM (2022-01-01 a 2026-08-31).
 
-La documentación completa del proyecto está en **`guia_proyecto.html`** (fuente: `guia_proyecto.qmd`). Las instrucciones del curso están en `docs/guia_proyecto_final_curso.pdf`.
+La documentación de la fase 1 está en **`guia_proyecto.html`** (fuente: `guia_proyecto.qmd`) y la de la fase 2 en **`guia_fase2.html`** (fuente: `guia_fase2.qmd`). Las instrucciones del curso están en `docs/guia_proyecto_final_curso.pdf`.
 
-## Ejecución (VS Code)
+## Puesta en marcha (VS Code)
 
 Todos trabajamos con **Python 3.11**, **VS Code** y las versiones fijadas en `requirements.txt`. Cada uno crea su propio entorno virtual (`.venv/`), que no se sube a git.
 
@@ -99,9 +99,11 @@ data/raw/                     datos originales de XM
 data/interim/                 serie horaria estandarizada
 data/processed/               dataset con variables para los modelos
 notebooks/fase1_datos/        descarga, estandarización, análisis estadístico, feature engineering
-notebooks/fase2_redes_neuronales/
+notebooks/fase2_redes_neuronales/  un cuaderno por arquitectura (01_rnn.ipynb, ...)
 notebooks/fase3_optimizacion/
 src/energia/                  código del proyecto
+src/energia/modelos/          arquitecturas de la fase 2
+results/fase2/                métricas e historial de cada red
 scripts/construir_dataset.py  pipeline de datos completo
 reports/figuras/              figuras
 docs/                         guía del curso, propuesta inicial y cuadernos originales
