@@ -5608,7 +5608,12 @@ math[display="block"] { margin: 1em 0; overflow-x: auto; }
   <li><a href="#conclusión-rnn" id="toc-conclusión-rnn" class="nav-link" data-scroll-target="#conclusión-rnn"><span class="header-section-number">6.5</span> Conclusión RNN</a></li>
   </ul></li>
   <li><a href="#sec-reglas" id="toc-sec-reglas" class="nav-link" data-scroll-target="#sec-reglas"><span class="header-section-number">7</span> Regla a tener en cuenta para que los modelos sean comparables</a></li>
-  <li><a href="#cuadro-comparativo-final" id="toc-cuadro-comparativo-final" class="nav-link" data-scroll-target="#cuadro-comparativo-final"><span class="header-section-number">8</span> Cuadro Comparativo Final</a></li>
+  <li><a href="#cuadro-comparativo-final" id="toc-cuadro-comparativo-final" class="nav-link" data-scroll-target="#cuadro-comparativo-final"><span class="header-section-number">8</span> Cuadro Comparativo Final</a>
+  <ul class="collapse">
+  <li><a href="#validación-julio-a-diciembre-de-2025" id="toc-validación-julio-a-diciembre-de-2025" class="nav-link" data-scroll-target="#validación-julio-a-diciembre-de-2025"><span class="header-section-number">8.1</span> Validación (julio a diciembre de 2025)</a></li>
+  <li><a href="#prueba-enero-a-agosto-de-2026" id="toc-prueba-enero-a-agosto-de-2026" class="nav-link" data-scroll-target="#prueba-enero-a-agosto-de-2026"><span class="header-section-number">8.2</span> Prueba (enero a agosto de 2026)</a></li>
+  <li><a href="#entrenamiento-1" id="toc-entrenamiento-1" class="nav-link" data-scroll-target="#entrenamiento-1"><span class="header-section-number">8.3</span> Entrenamiento</a></li>
+  </ul></li>
   <li><a href="#referencias" id="toc-referencias" class="nav-link" data-scroll-target="#referencias"><span class="header-section-number">9</span> Referencias</a></li>
   </ul>
 </nav>
@@ -6186,37 +6191,43 @@ math[display="block"] { margin: 1em 0; overflow-x: auto; }
 </section>
 <section id="cuadro-comparativo-final" class="level1" data-number="8">
 <h1 data-number="8"><span class="header-section-number">8</span> Cuadro Comparativo Final</h1>
-<p>Cuando estén las cinco redes, juntamos los <code>metricas.csv</code> de <code>results/fase2/</code> en una sola tabla y comparamos con la validación:</p>
+<p>Cuando estén las cinco redes, juntamos los <code>metricas.csv</code> de <code>results/fase2/</code> y los comparamos. Las redes se escogen con la validación; la prueba se mira al final para confirmar que el resultado se sostiene con datos de 2026.</p>
+<section id="validación-julio-a-diciembre-de-2025" class="level2" data-number="8.1">
+<h2 data-number="8.1" class="anchored" data-anchor-id="validación-julio-a-diciembre-de-2025"><span class="header-section-number">8.1</span> Validación (julio a diciembre de 2025)</h2>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 16%">
-<col style="width: 16%">
-<col style="width: 16%">
-<col style="width: 16%">
-<col style="width: 16%">
-<col style="width: 16%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
 </colgroup>
 <thead>
 <tr class="header">
 <th>Red</th>
-<th>MAPE demanda val [%]</th>
-<th>MAPE precio val [%]</th>
-<th>Mejor época</th>
-<th>Parámetros</th>
-<th>Tiempo</th>
+<th>MAE demanda [kWh]</th>
+<th>MAPE demanda [%]</th>
+<th>R² demanda</th>
+<th>MAE precio [COP/kWh]</th>
+<th>MAPE precio [%]</th>
+<th>R² precio</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td>RNN</td>
+<td>67.180</td>
 <td>2,24</td>
+<td>0,87</td>
+<td>78,8</td>
 <td>37,21</td>
-<td>13</td>
-<td>55.728</td>
-<td>~59 min (CPU)</td>
+<td>0,32</td>
 </tr>
 <tr class="even">
 <td>TCN</td>
+<td></td>
 <td></td>
 <td></td>
 <td></td>
@@ -6230,9 +6241,11 @@ math[display="block"] { margin: 1em 0; overflow-x: auto; }
 <td></td>
 <td></td>
 <td></td>
+<td></td>
 </tr>
 <tr class="even">
 <td>LSTM</td>
+<td></td>
 <td></td>
 <td></td>
 <td></td>
@@ -6246,26 +6259,171 @@ math[display="block"] { margin: 1em 0; overflow-x: auto; }
 <td></td>
 <td></td>
 <td></td>
+<td></td>
 </tr>
 <tr class="even">
 <td><em>Naive <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>m</mi><mo>=</mo><mn>168</mn></mrow><annotation encoding="application/x-tex">m=168</annotation></semantics></math></em></td>
+<td><em>111.762</em></td>
 <td><em>3,83</em></td>
+<td><em>0,54</em></td>
+<td><em>81,7</em></td>
 <td><em>37,45</em></td>
-<td>—</td>
-<td>—</td>
-<td>—</td>
+<td><em>0,22</em></td>
 </tr>
 <tr class="odd">
 <td><em>Naive <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>m</mi><mo>=</mo><mn>24</mn></mrow><annotation encoding="application/x-tex">m=24</annotation></semantics></math></em></td>
+<td><em>194.136</em></td>
 <td><em>6,72</em></td>
+<td><em>−0,08</em></td>
+<td><em>48,5</em></td>
 <td><em>20,34</em></td>
-<td>—</td>
-<td>—</td>
-<td>—</td>
+<td><em>0,48</em></td>
 </tr>
 </tbody>
 </table>
-<p>Con esa tabla, las curvas de aprendizaje y las figuras de pronóstico escogemos las dos redes que pasan a la fase 3.</p>
+</section>
+<section id="prueba-enero-a-agosto-de-2026" class="level2" data-number="8.2">
+<h2 data-number="8.2" class="anchored" data-anchor-id="prueba-enero-a-agosto-de-2026"><span class="header-section-number">8.2</span> Prueba (enero a agosto de 2026)</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Red</th>
+<th>MAE demanda [kWh]</th>
+<th>MAPE demanda [%]</th>
+<th>R² demanda</th>
+<th>MAE precio [COP/kWh]</th>
+<th>MAPE precio [%]</th>
+<th>R² precio</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>RNN</td>
+<td>82.929</td>
+<td>2,70</td>
+<td>0,86</td>
+<td>127,5</td>
+<td>29,08</td>
+<td>0,69</td>
+</tr>
+<tr class="even">
+<td>TCN</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>GRU</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>LSTM</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Transformer</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><em>Naive <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>m</mi><mo>=</mo><mn>168</mn></mrow><annotation encoding="application/x-tex">m=168</annotation></semantics></math></em></td>
+<td><em>121.129</em></td>
+<td><em>4,06</em></td>
+<td><em>0,49</em></td>
+<td><em>126,5</em></td>
+<td><em>34,67</em></td>
+<td><em>0,68</em></td>
+</tr>
+<tr class="odd">
+<td><em>Naive <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>m</mi><mo>=</mo><mn>24</mn></mrow><annotation encoding="application/x-tex">m=24</annotation></semantics></math></em></td>
+<td><em>194.817</em></td>
+<td><em>6,67</em></td>
+<td><em>0,07</em></td>
+<td><em>56,1</em></td>
+<td><em>14,86</em></td>
+<td><em>0,88</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="entrenamiento-1" class="level2" data-number="8.3">
+<h2 data-number="8.3" class="anchored" data-anchor-id="entrenamiento-1"><span class="header-section-number">8.3</span> Entrenamiento</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Red</th>
+<th>Mejor época</th>
+<th>Épocas entrenadas</th>
+<th>Parámetros</th>
+<th>Tiempo</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>RNN</td>
+<td>13</td>
+<td>21</td>
+<td>55.728</td>
+<td>~59 min (CPU)</td>
+</tr>
+<tr class="even">
+<td>TCN</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>GRU</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>LSTM</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Transformer</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Con estas tablas, las curvas de aprendizaje y las figuras de pronóstico escogemos las dos redes que pasan a la fase 3.</p>
+</section>
 </section>
 <section id="referencias" class="level1" data-number="9">
 <h1 data-number="9"><span class="header-section-number">9</span> Referencias</h1>
