@@ -40,7 +40,7 @@ En la fase 2 cada uno de nosotros construye, entrena y evalúa una red neuronal 
 
 La RNN fue la primera, y con ella dejamos montado todo lo que las demás redes comparten: el ciclo de entrenamiento, la evaluación, el guardado de resultados y las figuras. Esta guía explica esas piezas, muestra cómo quedó la RNN y resume lo que cada uno tiene que tener en cuenta para hacer su red. La guía de la fase 1 (`guia_proyecto.html`) sigue siendo la referencia para los datos, el pipeline y las líneas base.
 
-En pocas palabras, la RNN pronostica muy bien la demanda (MAPE de 2,24 % en validación, contra 3,83 % del mejor naive) pero todavía no le gana al naive diario en el precio (37,2 % contra 20,3 %). La TCN es un poco menos precisa en demanda (2,49 %), pero en precio baja el error a 27,4 % y es la primera red que supera al naive diario en RMSE y R² del precio. El Transformer también cumple en demanda (2,77 %) y en el precio queda cerca del naive diario (22,2 % contra 20,3 %), sin superarlo. Los detalles están en las secciones [-@sec-resultados], [-@sec-resultados-tcn] y [-@sec-resultados-transformer].
+En pocas palabras, la RNN pronostica muy bien la demanda (MAPE de 2,24 % en validación, contra 3,83 % del mejor naive) pero todavía no le gana al naive diario en el precio (37,2 % contra 20,3 %). La TCN es un poco menos precisa en demanda (2,49 %), pero en precio baja el error a 27,4 % y es la primera red que supera al naive diario en RMSE y R² del precio. El Transformer también cumple en demanda (2,80 %) y en el precio mejora a la RNN (31,2 %), pero tampoco le gana al naive diario. Los detalles están en las secciones [-@sec-resultados], [-@sec-resultados-tcn] y [-@sec-resultados-transformer].
 
 # Cómo está organizada la fase 2 {#sec-organizacion}
 
@@ -436,16 +436,13 @@ flowchart TD
     F["futuro<br/>(lote, 24, 9)"] --> E2["proyección lineal 9 → 64<br/>+ posición"]
     E2 --> D["Decodificador: 1 capa<br/>atención cruzada: cada hora de mañana<br/>consulta la memoria"]
     M --> D
-    D --> S["Densa 2: corrección<br/>(lote, 24, 2)"]
-    P --> B["naive de cada serie<br/>demanda de hace 168 h · precio de hace 24 h<br/>(lote, 24, 2)"]
-    S --> Y["suma<br/>(lote, 24, 2)"]
-    B --> Y
+    D --> S["Densa 2<br/>(lote, 24, 2)"]
 ```
 
 1. **Proyección y posición.** Una capa lineal convierte las 16 variables de cada hora del pasado en un vector de 64 números, y otra hace lo mismo con las 9 variables de calendario de cada hora de mañana. A cada hora se le suma su vector de posición.
 2. **Codificador.** Dos capas. En cada una, las 168 horas se comparan entre sí con atención de 4 cabezas y luego pasan por una red densa de 128 neuronas con GELU, con *dropout* de 0,2. El resultado es una "memoria" de la semana: 168 horas con 64 números cada una.
 3. **Decodificador.** Una capa. Las 24 horas de mañana, descritas solo por su calendario, se relacionan entre sí y después consultan la memoria con atención cruzada: cada hora a pronosticar decide a cuáles de las 168 horas de la semana les pone más atención.
-4. **Corrección sobre el naive.** La capa de salida entrega dos números por hora. No son el pronóstico completo, sino lo que se le suma al naive de cada serie: la demanda de la misma hora de la semana pasada y el precio de la misma hora de ayer, que ya vienen dentro de `pasado`. La capa de salida arranca en cero, así que la red sin entrenar pronostica exactamente el naive.
+4. **Capa de salida.** Una capa densa convierte los 64 números de cada hora de mañana en sus dos salidas: la demanda y el precio.
 
 Las 24 horas salen **de una sola vez**. El decodificador no usa la predicción de una hora para calcular la siguiente, y no necesita máscara porque de mañana solo recibe el calendario, que se conoce de antemano.
 
@@ -462,15 +459,15 @@ Los hiperparámetros por defecto están en `transformer.HIPERPARAMETROS`:
 
 ```python
 HIPERPARAMETROS = {"d_model": 64, "nhead": 4, "capas_codificador": 2, "capas_decodificador": 1,
-                   "dim_ff": 128, "dropout": 0.2, "corregir_naive": True}
+                   "dim_ff": 128, "dropout": 0.2, "corregir_naive": False}
 ```
 
-Tiene más parámetros que la RNN (131.586 frente a 55.728), casi todos en las capas de atención. Con `corregir_naive=False` la misma red predice el valor completo, sin apoyarse en la línea base.
+Tiene más parámetros que la RNN (131.586 frente a 55.728), casi todos en las capas de atención. La opción `corregir_naive` permite sumar la salida al naive de cada serie; se deja en `False` para que la red prediga el valor completo, sin apoyarse en la línea base.
 
 ## Limitaciones conocidas
 
-- **Sobreajusta rápido.** Las 30.265 ventanas de entrenamiento se solapan y corresponden a 1.262 días distintos, que es poco para una red de este tamaño. La mejor época fue la cuarta.
-- **En el precio depende de la línea base.** La corrección que aprende sobre el precio de ayer es pequeña, así que el pronóstico de precio se parece mucho al naive diario y hereda sus fallas: no anticipa cuándo aparece o desaparece un pico.
+- **Sobreajusta rápido.** Las 30.265 ventanas de entrenamiento se solapan y corresponden a 1.262 días distintos, que es poco para una red de este tamaño. La mejor época fue la tercera.
+- **No sigue el nivel del precio.** Aprende la forma típica del día, con una subida hacia la noche, pero no ajusta bien el nivel cuando el precio cambia de régimen ni alcanza los picos.
 - **La atención crece con el cuadrado de la ventana.** Con 168 horas son 28.224 comparaciones por cabeza y capa, que se manejan bien en CPU. Con una ventana más larga el costo subiría rápido.
 
 # Resultados del Transformer {#sec-resultados-transformer}
@@ -480,33 +477,33 @@ Tiene más parámetros que la RNN (131.586 frente a 55.728), casi todos en las c
 | | |
 |---|---|
 | Dispositivo | CPU (PyTorch 2.5.1) |
-| Épocas entrenadas | 12 (paró por *early stopping*) |
-| Mejor época | 4 |
-| Mejor pérdida de validación | 0,1876 |
-| Pérdida de entrenamiento en la mejor época | 0,0917 |
-| Tiempo total | unos 23 minutos (unos 112 s por época) |
+| Épocas entrenadas | 11 (paró por *early stopping*) |
+| Mejor época | 3 |
+| Mejor pérdida de validación | 0,2004 |
+| Pérdida de entrenamiento en la mejor época | 0,0941 |
+| Tiempo total | unos 25 minutos (entre 128 y 140 s por época) |
 
 ![Pérdida por época del Transformer. La línea punteada marca la mejor época.](reports/figuras/f2_05_transformer_curvas.png)
 
-La validación arranca en 0,2035 en la primera época, muy por debajo del 0,30 con que empezó la RNN. Es el efecto de partir del naive: sin entrenar, la red ya tiene la pérdida del naive (0,32 en validación) y desde ahí solo corrige. La mejor época fue la cuarta, con 0,1876. Después la pérdida de entrenamiento siguió bajando hasta 0,060 mientras la de validación subía hasta 0,25, el mismo patrón de sobreajuste que vimos en la RNN, y la parada temprana lo cortó.
+La validación bajó en las tres primeras épocas, de 0,2517 a 0,2004, y desde la cuarta empezó a subir hasta pasar de 0,30. Mientras tanto, la pérdida de entrenamiento siguió bajando hasta 0,055. Es el mismo patrón de sobreajuste que vimos en la RNN, pero aparece mucho antes, y la parada temprana lo cortó.
 
-Tardó unos 23 minutos, frente a los 59 de la RNN. Cada época tomó cerca de 112 segundos, con muy poca variación, y además necesitó menos épocas.
+Tardó unos 25 minutos, frente a los 59 de la RNN. Cada época tomó cerca de 135 segundos, con poca variación, y además necesitó menos épocas.
 
 ## Métricas
 
 | Modelo | Partición | MAE demanda [kWh] | MAPE demanda [%] | R² demanda | MAE precio [COP/kWh] | MAPE precio [%] | R² precio |
 |---|---|---|---|---|---|---|---|
-| **Transformer** | val | **81.211** | **2,77** | **0,80** | 50,8 | 22,21 | 0,48 |
+| **Transformer** | val | **81.872** | **2,80** | **0,81** | 69,5 | 31,25 | 0,43 |
 | Naive $m=168$ | val | 111.762 | 3,83 | 0,54 | 81,7 | 37,45 | 0,22 |
-| Naive $m=24$ | val | 194.136 | 6,72 | −0,08 | **48,5** | **20,34** | 0,48 |
-| **Transformer** | test | **85.085** | **2,82** | **0,83** | 59,6 | 14,97 | **0,89** |
+| Naive $m=24$ | val | 194.136 | 6,72 | −0,08 | **48,5** | **20,34** | **0,48** |
+| **Transformer** | test | **106.807** | **3,54** | **0,79** | 93,8 | 24,02 | 0,81 |
 | Naive $m=168$ | test | 121.129 | 4,06 | 0,49 | 126,5 | 34,67 | 0,68 |
-| Naive $m=24$ | test | 194.817 | 6,67 | 0,07 | **56,1** | **14,86** | 0,88 |
+| Naive $m=24$ | test | 194.817 | 6,67 | 0,07 | **56,1** | **14,86** | **0,88** |
 
 Frente a la meta que nos pusimos en la fase 1 (MAPE de demanda menor a 3,83 % y de precio menor a 20,34 % en validación):
 
-- **Demanda: cumple.** El MAPE baja de 3,83 % a 2,77 % en validación (28 % menos error) y de 4,06 % a 2,82 % en prueba (30 % menos). El R² pasa de 0,54 a 0,80. Queda un poco por detrás de la RNN (2,24 % en validación).
-- **Precio: no cumple, aunque queda cerca.** En validación queda en 22,2 %, a 1,9 puntos del naive diario (20,3 %) y muy por debajo del 37,2 % de la RNN. En prueba prácticamente lo iguala: 14,97 % contra 14,86 %.
+- **Demanda: cumple.** El MAPE baja de 3,83 % a 2,80 % en validación (27 % menos error) y de 4,06 % a 3,54 % en prueba (13 % menos). El R² pasa de 0,54 a 0,81. Queda por detrás de la RNN, que tiene 2,24 % en validación y 2,70 % en prueba.
+- **Precio: no cumple.** En validación queda en 31,2 %, mejor que la RNN (37,2 %) y que el naive semanal (37,4 %), pero lejos del naive diario (20,3 %), que sigue siendo la mejor referencia para el precio. En prueba pasa lo mismo: 24,0 % contra 14,9 %.
 
 ## Pronóstico contra lo observado
 
@@ -514,26 +511,25 @@ Frente a la meta que nos pusimos en la fase 1 (MAPE de demanda menor a 3,83 % y 
 
 ![Primeros 14 días de prueba (enero de 2026).](reports/figuras/f2_05_transformer_pronostico_test.png)
 
-En la **demanda**, la red sigue el ciclo diario y las caídas de los domingos (6 y 13 de julio de 2025). En prueba acompaña el bajón de comienzo de año y la recuperación, aunque hay días en que se queda corta, como el 7 y el 8 de enero de 2026.
+En la **demanda**, la red sigue el ciclo diario y las caídas de los domingos (6 y 13 de julio de 2025). En algunos días el pronóstico arranca con un salto a las 00:00, porque cada día se pronostica por separado. En prueba acompaña el bajón de comienzo de año, pero se queda corta en varios días, como el 3, el 4 y el 12 de enero de 2026.
 
-En el **precio** el pronóstico se comporta como el naive diario:
+En el **precio** se ven dos problemas:
 
-- **Acierta el nivel de los días normales.** Cuando el precio está plano, cerca de 110 COP/kWh, el pronóstico va pegado a él.
-- **Los picos llegan un día tarde.** El pico del 2 de julio aparece en el pronóstico del 3, cuando ya no ocurrió. El del 8 de julio (830 COP/kWh) solo lo alcanza a la mitad, y el 9 y el 10 pronostica picos de 840 que no se dieron.
-- **Sigue los cambios de nivel, también con un día de retraso.** En enero de 2026, cuando el precio cae a 100–280 COP/kWh, el pronóstico baja con él al día siguiente. No se queda arriba, como le pasaba a la RNN.
+- **No alcanza los picos.** En julio pronostica una curva suave, cerca de 100 COP/kWh, con una subida pequeña hacia la noche. Los picos reales de 440 a 840 COP/kWh no aparecen en el pronóstico; después de ellos apenas sube a 250–270.
+- **No sigue el nivel.** En la primera semana de enero de 2026 el precio real está entre 300 y 350 COP/kWh y la red pronostica entre 100 y 260. Cuando el precio cae, a partir del 8 de enero, el pronóstico hace lo contrario y sube hasta 330–360 en las noches. Repite la forma típica del día sin acomodarse al nivel de cada momento.
 
 ## Error por hora del día
 
 ![MAE por hora del día en validación, Transformer contra los dos naive.](reports/figuras/f2_05_transformer_error_por_hora.png)
 
-- En **demanda**, el Transformer tiene menos error que los dos naive en las 24 horas, con una curva casi plana.
-- En **precio**, su curva se superpone con la del naive diario en casi todas las horas, incluido el pico de las 19:00.
+- En **demanda**, el Transformer tiene menos error que los dos naive en casi todas las horas. Su mejor momento es entre las 06:00 y las 08:00, y solo a las 23:00 queda igual que el naive semanal.
+- En **precio**, queda entre los dos naive en la madrugada, se iguala con el naive semanal de las 09:00 a las 14:00 y va por encima del naive diario en todas las horas. Los tres modelos tienen el pico de error a las 19:00.
 
 ## Conclusión Transformer
 
-El Transformer aprende bien la demanda, aunque con algo más de error que la RNN, y en el precio queda mucho más cerca del naive diario que ella. Ese resultado en el precio hay que leerlo con cuidado: viene de que el modelo parte del precio de ayer y lo corrige poco, no de que anticipe los picos. La corrección que aprende sirve sobre todo en la demanda, donde el calendario de mañana aporta mucho.
+El Transformer aprende bien la demanda, aunque con más error que la RNN, sobre todo en prueba. En el precio mejora a la RNN, pero sigue lejos del naive diario: pronostica una curva suave con la forma típica del día y no capta ni los picos ni los cambios de nivel, que es justo lo que el naive diario resuelve copiando el día anterior.
 
-Igual que la RNN, esta red tiene los hiperparámetros por defecto y no se afinó. Sobreajusta rápido, así que si pasa a la fase 3 lo primero sería probar más regularización y una tasa de aprendizaje más baja.
+Igual que la RNN, esta red tiene los hiperparámetros por defecto y no se afinó. Sobreajusta muy rápido, con la mejor época en la tercera, así que si pasa a la fase 3 lo primero sería probar más regularización y una tasa de aprendizaje más baja.
 
 # Regla a tener en cuenta para que los modelos sean comparables {#sec-reglas}
 
@@ -555,7 +551,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 | TCN | 73.563 | 2,49 | 0,86 | 57,7 | 27,43 | 0,56 |
 | GRU | | | | | | |
 | LSTM | | | | | | |
-| Transformer | 81.211 | 2,77 | 0,80 | 50,8 | 22,21 | 0,48 |
+| Transformer | 81.872 | 2,80 | 0,81 | 69,5 | 31,25 | 0,43 |
 | *Naive $m=168$* | *111.762* | *3,83* | *0,54* | *81,7* | *37,45* | *0,22* |
 | *Naive $m=24$* | *194.136* | *6,72* | *−0,08* | *48,5* | *20,34* | *0,48* |
 
@@ -567,7 +563,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 | TCN | 83.670 | 2,74 | 0,86 | 83,1 | 20,68 | 0,85 |
 | GRU | | | | | | |
 | LSTM | | | | | | |
-| Transformer | 85.085 | 2,82 | 0,83 | 59,6 | 14,97 | 0,89 |
+| Transformer | 106.807 | 3,54 | 0,79 | 93,8 | 24,02 | 0,81 |
 | *Naive $m=168$* | *121.129* | *4,06* | *0,49* | *126,5* | *34,67* | *0,68* |
 | *Naive $m=24$* | *194.817* | *6,67* | *0,07* | *56,1* | *14,86* | *0,88* |
 
@@ -579,7 +575,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 | TCN | 2 | 10 | 40.098 | ~43 min (CPU) |
 | GRU | | | | |
 | LSTM | | | | |
-| Transformer | 4 | 12 | 131.586 | ~23 min (CPU) |
+| Transformer | 3 | 11 | 131.586 | ~25 min (CPU) |
 
 Con estas tablas, las curvas de aprendizaje y las figuras de pronóstico escogemos las dos redes que pasan a la fase 3, siguiendo el criterio de la sección [-@sec-criterio].
 

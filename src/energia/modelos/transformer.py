@@ -3,8 +3,8 @@
 Codificador: autoatención sobre las 168 h de historia (`pasado`).
 Decodificador: las 24 h a pronosticar, descritas por su calendario (`futuro`),
 consultan la historia codificada con atención cruzada y salen de una sola vez.
-La salida es una corrección que se suma a la línea base naive de cada serie
-(demanda de hace 168 h y precio de hace 24 h, ambas presentes en `pasado`).
+Con `corregir_naive=True` la salida se suma a la línea base naive de cada serie
+(demanda de hace 168 h y precio de hace 24 h); por defecto la red predice el valor completo.
 """
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ import torch
 from torch import nn
 
 HIPERPARAMETROS = {"d_model": 64, "nhead": 4, "capas_codificador": 2, "capas_decodificador": 1,
-                   "dim_ff": 128, "dropout": 0.2, "corregir_naive": True}
+                   "dim_ff": 128, "dropout": 0.2, "corregir_naive": False}
 
 
 class TransformerPronostico(nn.Module):
     def __init__(self, n_pasado: int, n_futuro: int, n_salidas: int, ventana: int, horizonte: int,
                  d_model: int = 64, nhead: int = 4, capas_codificador: int = 2, capas_decodificador: int = 1,
-                 dim_ff: int = 128, dropout: float = 0.2, corregir_naive: bool = True,
+                 dim_ff: int = 128, dropout: float = 0.2, corregir_naive: bool = False,
                  rezagos_naive: tuple[int, ...] = (168, 24)):
         super().__init__()
         self.horizonte = horizonte

@@ -5,7 +5,7 @@
   "capas_decodificador": 1,
   "dim_ff": 128,
   "dropout": 0.2,
-  "corregir_naive": true,
+  "corregir_naive": false,
   "optimizador": "adam",
   "lr": 0.001,
   "epocas": 50,
@@ -13,6 +13,6 @@
   "paciencia": 8,
   "clip": 1.0,
   "parametros": 131586,
-  "mejor_epoca": 4,
-  "epocas_entrenadas": 12
+  "mejor_epoca": 3,
+  "epocas_entrenadas": 11
 }
