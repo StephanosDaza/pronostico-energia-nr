@@ -1,0 +1,18 @@
+{
+  "d_model": 64,
+  "nhead": 4,
+  "capas_codificador": 2,
+  "capas_decodificador": 1,
+  "dim_ff": 128,
+  "dropout": 0.2,
+  "corregir_naive": true,
+  "optimizador": "adam",
+  "lr": 0.001,
+  "epocas": 50,
+  "batch": 256,
+  "paciencia": 8,
+  "clip": 1.0,
+  "parametros": 131586,
+  "mejor_epoca": 4,
+  "epocas_entrenadas": 12
+}
