@@ -1,0 +1,15 @@
+{
+  "oculto": 64,
+  "capas": 2,
+  "dropout": 0.1,
+  "cabeza": 128,
+  "optimizador": "adam",
+  "lr": 0.001,
+  "epocas": 50,
+  "batch": 256,
+  "paciencia": 8,
+  "clip": 1.0,
+  "parametros": 96432,
+  "mejor_epoca": 3,
+  "epocas_entrenadas": 11
+}
