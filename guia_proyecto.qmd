@@ -3,7 +3,7 @@ title: "Pronóstico de demanda no regulada y precio de bolsa en Colombia"
 subtitle: "Guía del proyecto · Optimización e Inteligencia Artificial"
 author:
   - Esteban Daza Palomino
-  - Isabel Suárez Londoño
+  - Sara Isabel Suárez Londoño
   - Sara Jurado Giraldo
   - Kevin González Duarte
   - Stiven Saldarriaga Mayorga
