@@ -5,13 +5,16 @@ Codificador: bloques residuales de convoluciones causales y dilatadas
 Cabeza: cada hora h del día a pronosticar usa la salida de la TCN y los valores
 observados en la misma hora del día anterior, más su calendario (`futuro`).
 Una red densa compartida por las 24 horas produce las 2 salidas de cada hora.
+Con `corregir_naive=True` la salida se suma a la línea base naive de cada serie
+(demanda de hace 168 h y precio de hace 24 h); por defecto la red predice el valor completo.
 """
 from __future__ import annotations
 
 import torch
 from torch import nn
 
-HIPERPARAMETROS = {"canales": 32, "kernel": 3, "niveles": 6, "dropout": 0.1, "cabeza": 64}
+HIPERPARAMETROS = {"canales": 32, "kernel": 3, "niveles": 6, "dropout": 0.1, "cabeza": 64,
+                   "corregir_naive": False}
 
 
 class ConvCausal(nn.Module):
@@ -45,9 +48,10 @@ class BloqueResidual(nn.Module):
 class TCNPronostico(nn.Module):
     def __init__(self, n_pasado: int, n_futuro: int, horizonte: int, n_objetivos: int,
                  canales: int = 32, kernel: int = 3, niveles: int = 6, dropout: float = 0.1,
-                 cabeza: int = 64):
+                 cabeza: int = 64, corregir_naive: bool = False):
         super().__init__()
         self.horizonte = horizonte
+        self.corregir_naive = corregir_naive
         self.tcn = nn.Sequential(*[
             BloqueResidual(n_pasado if i == 0 else canales, canales, kernel, 2 ** i, dropout)
             for i in range(niveles)
@@ -58,16 +62,24 @@ class TCNPronostico(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(cabeza, n_objetivos),
         )
+        if corregir_naive:
+            nn.init.zeros_(self.cabeza[-1].weight)
+            nn.init.zeros_(self.cabeza[-1].bias)
 
     def forward(self, pasado: torch.Tensor, futuro: torch.Tensor) -> torch.Tensor:
         h = self.horizonte
         contexto = self.tcn(pasado.transpose(1, 2))[:, :, -h:].transpose(1, 2)
         ayer = pasado[:, -h:, :]
-        return self.cabeza(torch.cat([contexto, ayer, futuro], dim=-1))
+        y = self.cabeza(torch.cat([contexto, ayer, futuro], dim=-1))
+        if self.corregir_naive:
+            y = y + torch.stack([pasado[:, -168:-168 + h, 0], pasado[:, -h:, 1]], dim=-1)
+        return y
 
 
 def construir(datos, **hp) -> TCNPronostico:
     parametros = {**HIPERPARAMETROS, **hp}
+    if parametros["corregir_naive"]:
+        assert datos.columnas_pasado[:2] == datos.columnas_objetivo and datos.ventana >= 168
     return TCNPronostico(
         n_pasado=len(datos.columnas_pasado),
         n_futuro=len(datos.columnas_futuro),
