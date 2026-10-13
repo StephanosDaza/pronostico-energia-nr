@@ -1,11 +1,9 @@
-"""Experimentos de la fase 3.
+"""Optimización de la fase 3.
 
-Cada experimento entrena una configuración con `entrenar`, la evalúa en
-validación (y en prueba solo cuando se pide) y agrega una fila a
-results/fase3/<red>/experimentos.csv. Si el experimento ya está registrado no
-se vuelve a entrenar, así que un cuaderno interrumpido se puede correr de nuevo
-y continúa donde iba.
+Entrena cada configuración, la evalúa en validación y guarda sus resultados
+en results/fase3/<red>/. 
 """
+
 from __future__ import annotations
 
 import json
