@@ -1,0 +1,9 @@
+,,TCN fase 2,TCN fase 3 (media),TCN fase 3 (desv.),naive m=24,naive m=168
+val,demanda_MAPE_%,2.488,3.618,0.037,6.719,3.833
+val,precio_MAPE_%,27.432,20.952,0.257,20.337,37.449
+val,precio_RMSE,102.133,104.678,0.207,111.795,136.077
+val,precio_R2,0.563,0.541,0.002,0.476,0.224
+test,demanda_MAPE_%,2.743,3.957,0.066,6.671,4.06
+test,precio_MAPE_%,20.677,15.278,0.265,14.863,34.665
+test,precio_RMSE,123.346,109.125,1.993,111.123,182.249
+test,precio_R2,0.853,0.885,0.004,0.881,0.68
