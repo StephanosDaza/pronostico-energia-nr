@@ -87,7 +87,7 @@ y sube ese archivo. Desde ahí, todos instalamos con `pip install -r requirement
 
 ### Agregar una librería
 
-Se acuerda entre todos, se instala con versión fija (`pip install <libreria>==<version>`), se agrega a `requirements.txt` y se regenera el lock con el comando anterior. Los demás, con su entorno activo, ejecutan `pip install -r requirements-lock.txt`.
+Se instala con versión fija (`pip install <libreria>==<version>`), se agrega a `requirements.txt` y se regenera el lock con el comando anterior. Los demás, con su entorno activo, ejecutan `pip install -r requirements-lock.txt`.
 
 ## Estructura
 

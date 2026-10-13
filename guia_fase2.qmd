@@ -35,12 +35,12 @@ En la fase 2 cada uno de nosotros construye, entrena y evalúa una red neuronal 
 | RNN simple | Esteban | `01_rnn.ipynb` | **Entrenada** |
 | TCN | Sara | `02_tcn.ipynb` | **Entrenada** |
 | GRU | Isabel | `03_gru.ipynb` | Por hacer |
-| LSTM | Kevin | `04_lstm.ipynb` | Por hacer |
+| LSTM | Kevin | `04_lstm.ipynb` | **Entrenada** |
 | Transformer | Stiven | `05_transformer.ipynb` | **Entrenada** |
 
 La RNN fue la primera, y con ella dejamos montado todo lo que las demás redes comparten: el ciclo de entrenamiento, la evaluación, el guardado de resultados y las figuras. Esta guía explica esas piezas, muestra cómo quedó la RNN y resume lo que cada uno tiene que tener en cuenta para hacer su red. La guía de la fase 1 (`guia_proyecto.html`) sigue siendo la referencia para los datos, el pipeline y las líneas base.
 
-En pocas palabras, la RNN pronostica muy bien la demanda (MAPE de 2,24 % en validación, contra 3,83 % del mejor naive) pero todavía no le gana al naive diario en el precio (37,2 % contra 20,3 %). La TCN es un poco menos precisa en demanda (2,49 %), pero en precio baja el error a 27,4 % y es la primera red que supera al naive diario en RMSE y R² del precio. El Transformer también cumple en demanda (2,80 %) y en el precio mejora a la RNN (31,2 %), pero tampoco le gana al naive diario. Los detalles están en las secciones [-@sec-resultados], [-@sec-resultados-tcn] y [-@sec-resultados-transformer].
+En pocas palabras, la RNN pronostica muy bien la demanda (MAPE de 2,24 % en validación, contra 3,83 % del mejor naive) pero todavía no le gana al naive diario en el precio (37,2 % contra 20,3 %). La TCN es un poco menos precisa en demanda (2,49 %), pero en precio baja el error a 27,4 % y es la primera red que supera al naive diario en RMSE y R² del precio. La LSTM cumple en demanda (3,10 %) y en precio queda en 32,4 %, mejor que la RNN. El Transformer también cumple en demanda (2,80 %) y en el precio mejora a la RNN (31,2 %), pero tampoco le gana al naive diario. Los detalles están en las secciones [-@sec-resultados], [-@sec-resultados-tcn], [-@sec-resultados-lstm] y [-@sec-resultados-transformer].
 
 # Cómo está organizada la fase 2 {#sec-organizacion}
 
@@ -412,6 +412,107 @@ La TCN confirma lo que habían sugerido las versiones evaluadas: lo que más ayu
 
 También sobreajusta muy rápido: la mejor época fue la segunda. Si la TCN pasa a la fase 3, lo primero sería regularizarla más.
 
+# La arquitectura LSTM {#sec-lstm}
+
+## Cómo funciona una LSTM
+
+La LSTM (*Long Short-Term Memory*) recorre la semana hora por hora, igual que la RNN, pero además del estado oculto $\mathbf{h}_t$ lleva una memoria $\mathbf{c}_t$ que se actualiza con tres compuertas. Cada compuerta es un número entre 0 y 1 por cada unidad, calculado a partir de la hora actual y del estado anterior:
+
+$$
+\begin{aligned}
+\mathbf{f}_t &= \sigma\left(\mathbf{W}_f \mathbf{x}_t + \mathbf{U}_f \mathbf{h}_{t-1} + \mathbf{b}_f\right) && \text{olvido} \\
+\mathbf{i}_t &= \sigma\left(\mathbf{W}_i \mathbf{x}_t + \mathbf{U}_i \mathbf{h}_{t-1} + \mathbf{b}_i\right) && \text{entrada} \\
+\mathbf{o}_t &= \sigma\left(\mathbf{W}_o \mathbf{x}_t + \mathbf{U}_o \mathbf{h}_{t-1} + \mathbf{b}_o\right) && \text{salida} \\
+\tilde{\mathbf{c}}_t &= \tanh\left(\mathbf{W}_c \mathbf{x}_t + \mathbf{U}_c \mathbf{h}_{t-1} + \mathbf{b}_c\right) \\
+\mathbf{c}_t &= \mathbf{f}_t \odot \mathbf{c}_{t-1} + \mathbf{i}_t \odot \tilde{\mathbf{c}}_t \\
+\mathbf{h}_t &= \mathbf{o}_t \odot \tanh(\mathbf{c}_t)
+\end{aligned}
+$$
+
+La compuerta de olvido decide cuánto de la memoria anterior se conserva y la de entrada cuánto de la hora nueva se guarda. Como la memoria se actualiza sumando y no multiplicando por una tanh en cada paso, el gradiente llega con menos pérdida a las horas lejanas. Es la respuesta directa al problema del gradiente que se desvanece en la RNN.
+
+## Planteamiento LSTM
+
+La red es la misma de la RNN con el codificador cambiado: dos capas `nn.LSTM` de 64 unidades con *dropout* de 0,1 entre ellas, el último estado oculto de la segunda capa concatenado con el calendario de mañana aplanado (216 valores) y la misma cabeza densa de 128 neuronas que entrega las 48 salidas, reorganizadas en (24, 2).
+
+| Bloque | Parámetros |
+|---|---|
+| Capa LSTM 1 ($4 \cdot (16 \cdot 64 + 64 \cdot 64 + 2 \cdot 64)$) | 20.992 |
+| Capa LSTM 2 ($4 \cdot (64 \cdot 64 + 64 \cdot 64 + 2 \cdot 64)$) | 33.280 |
+| Densa 280 → 128 | 35.968 |
+| Densa 128 → 48 | 6.192 |
+| **Total** | **96.432** |
+
+Cada capa LSTM tiene cuatro veces los pesos de una capa RNN del mismo tamaño, una vez por cada compuerta y otra para la memoria candidata. Por eso tiene casi el doble de parámetros que la RNN (96.432 frente a 55.728).
+
+```python
+HIPERPARAMETROS = {"oculto": 64, "capas": 2, "dropout": 0.1, "cabeza": 128}
+```
+
+## Limitaciones conocidas
+
+- **Sigue resumiendo la semana en un solo vector.** Igual que la RNN, el pronóstico de las 24 horas sale del último estado oculto. No tiene la conexión con la misma hora del día anterior que le dio la ventaja a la TCN en el precio.
+- **Es más lenta por época que la RNN.** Hace cuatro veces más cuentas en cada paso y sigue procesando las 168 horas en fila.
+
+# Resultados de la LSTM {#sec-resultados-lstm}
+
+## Entrenamiento
+
+| | |
+|---|---|
+| Dispositivo | CPU (PyTorch 2.5.1) |
+| Épocas entrenadas | 11 (paró por *early stopping*) |
+| Mejor época | 3 |
+| Mejor pérdida de validación | 0,2238 |
+| Pérdida de entrenamiento en la mejor época | 0,0970 |
+| Tiempo total | unos 53 minutos (entre 155 y 555 s por época) |
+
+![Pérdida por época de la LSTM. La línea punteada marca la mejor época.](reports/figuras/f2_04_lstm_curvas.png)
+
+La validación bajó en las tres primeras épocas, de 0,3148 a 0,2238, y desde ahí osciló entre 0,26 y 0,32 sin volver a mejorar, mientras el entrenamiento seguía bajando hasta 0,065. Sobreajusta casi tan rápido como la TCN y el Transformer.
+
+La corrida se hizo en dos computadores distintos y dio exactamente las mismas pérdidas en todas las épocas, lo que confirma que con la semilla fija los resultados son reproducibles.
+
+## Métricas
+
+| Modelo | Partición | MAE demanda [kWh] | MAPE demanda [%] | R² demanda | MAE precio [COP/kWh] | MAPE precio [%] | RMSE precio [COP/kWh] | R² precio |
+|---|---|---|---|---|---|---|---|---|
+| **LSTM** | val | **93.362** | **3,10** | **0,80** | 70,1 | 32,38 | 126,5 | 0,33 |
+| Naive $m=168$ | val | 111.762 | 3,83 | 0,54 | 81,7 | 37,45 | 136,1 | 0,22 |
+| Naive $m=24$ | val | 194.136 | 6,72 | −0,08 | **48,5** | **20,34** | **111,8** | **0,48** |
+| **LSTM** | test | **112.338** | **3,64** | **0,77** | 108,6 | 22,28 | 165,2 | 0,74 |
+| Naive $m=168$ | test | 121.129 | 4,06 | 0,49 | 126,5 | 34,67 | 182,2 | 0,68 |
+| Naive $m=24$ | test | 194.817 | 6,67 | 0,07 | **56,1** | **14,86** | **111,1** | **0,88** |
+
+- **Demanda: cumple.** El MAPE baja de 3,83 % a 3,10 % en validación (19 % menos error) y de 4,06 % a 3,64 % en prueba. Es la red con más error en demanda de las cuatro entrenadas hasta ahora: la RNN tiene 2,24 %.
+- **Precio: no cumple.** En validación queda en 32,4 %, mejor que la RNN (37,2 %) y que el naive semanal (37,4 %), pero lejos del naive diario (20,3 %). En prueba, 22,3 % contra 14,9 %.
+
+## Pronóstico contra lo observado
+
+![Primeros 14 días de validación (julio de 2025).](reports/figuras/f2_04_lstm_pronostico_val.png)
+
+![Primeros 14 días de prueba (enero de 2026).](reports/figuras/f2_04_lstm_pronostico_test.png)
+
+En la **demanda**, sigue el ciclo diario y las caídas de los domingos, pero se queda corta en los máximos de casi todos los días laborales de julio. En prueba arranca por debajo del valor real en los primeros días de enero, sobre todo el 3 y el 4, y luego se acerca.
+
+En el **precio**:
+
+- **En validación es casi plana.** Se mueve entre 90 y 160 COP/kWh y no reacciona a ninguno de los picos de julio, ni siquiera a los escalones de 200 COP/kWh del 10 y el 11.
+- **En prueba sigue mejor el nivel que la RNN.** Acompaña la bajada del precio a partir del 8 de enero, aunque sobreestima en los primeros días del mes, con picos de hasta 520 COP/kWh cuando el real está en 350.
+
+## Error por hora del día
+
+![MAE por hora del día en validación, LSTM contra los dos naive.](reports/figuras/f2_04_lstm_error_por_hora.png)
+
+- En **demanda**, la LSTM tiene menos error que los dos naive entre las 06:00 y las 17:00, pero en la madrugada (01:00 a 05:00) y sobre todo entre las 18:00 y las 20:00 queda por encima del naive semanal. Es el mismo salto de las 18:00 que tuvo la RNN, pero más marcado.
+- En **precio**, queda entre los dos naive en casi todas las horas, cerca del semanal en la mañana y en la tarde. A las 19:00, la hora de los picos, tiene más error que los dos.
+
+## Conclusión LSTM
+
+Las compuertas ayudan en el precio: con la misma estructura y los mismos tamaños, la LSTM baja el error de 37,2 % (RNN) a 32,4 %. En la demanda pasa lo contrario y queda por detrás de la RNN. Igual que la RNN, resume la semana en un solo vector y no aprovecha la correspondencia con la misma hora del día anterior.
+
+El resultado es sensible a la tasa de aprendizaje. En una corrida preliminar con `lr` 1e-2, por fuera de la configuración común, el MAPE de precio en validación fue de 27,3 %. Ese tipo de ajuste es justo el que se estudia en la fase 3.
+
 # La arquitectura Transformer {#sec-transformer}
 
 ## Cómo funciona un Transformer
@@ -550,7 +651,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 | RNN | 67.180 | 2,24 | 0,87 | 78,8 | 37,21 | 0,32 |
 | TCN | 73.563 | 2,49 | 0,86 | 57,7 | 27,43 | 0,56 |
 | GRU | | | | | | |
-| LSTM | | | | | | |
+| LSTM | 93.362 | 3,10 | 0,80 | 70,1 | 32,38 | 0,33 |
 | Transformer | 81.872 | 2,80 | 0,81 | 69,5 | 31,25 | 0,43 |
 | *Naive $m=168$* | *111.762* | *3,83* | *0,54* | *81,7* | *37,45* | *0,22* |
 | *Naive $m=24$* | *194.136* | *6,72* | *−0,08* | *48,5* | *20,34* | *0,48* |
@@ -562,7 +663,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 | RNN | 82.929 | 2,70 | 0,86 | 127,5 | 29,08 | 0,69 |
 | TCN | 83.670 | 2,74 | 0,86 | 83,1 | 20,68 | 0,85 |
 | GRU | | | | | | |
-| LSTM | | | | | | |
+| LSTM | 112.338 | 3,64 | 0,77 | 108,6 | 22,28 | 0,74 |
 | Transformer | 106.807 | 3,54 | 0,79 | 93,8 | 24,02 | 0,81 |
 | *Naive $m=168$* | *121.129* | *4,06* | *0,49* | *126,5* | *34,67* | *0,68* |
 | *Naive $m=24$* | *194.817* | *6,67* | *0,07* | *56,1* | *14,86* | *0,88* |
@@ -574,7 +675,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 | RNN | 13 | 21 | 55.728 | ~59 min (CPU) |
 | TCN | 2 | 10 | 40.098 | ~43 min (CPU) |
 | GRU | | | | |
-| LSTM | | | | |
+| LSTM | 3 | 11 | 96.432 | ~53 min (CPU) |
 | Transformer | 3 | 11 | 131.586 | ~25 min (CPU) |
 
 Con estas tablas, las curvas de aprendizaje y las figuras de pronóstico escogemos las dos redes que pasan a la fase 3, siguiendo el criterio de la sección [-@sec-criterio].
