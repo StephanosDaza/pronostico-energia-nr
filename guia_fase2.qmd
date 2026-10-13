@@ -3,7 +3,7 @@ title: "Pronóstico de demanda no regulada y precio de bolsa en Colombia"
 subtitle: "Guía de la fase 2 · Redes neuronales"
 author:
   - Esteban Daza Palomino
-  - Sara Isabel Suárez Londoño
+  - Isabel Suárez Londoño
   - Sara Jurado Giraldo
   - Kevin González Duarte
   - Stiven Saldarriaga Mayorga
@@ -34,13 +34,13 @@ En la fase 2 cada uno de nosotros construye, entrena y evalúa una red neuronal 
 |---|---|---|---|
 | RNN simple | Esteban | `01_rnn.ipynb` | **Entrenada** |
 | TCN | Sara | `02_tcn.ipynb` | **Entrenada** |
-| GRU | Isabel | `03_gru.ipynb` | Por hacer |
+| GRU | Isabel | `03_gru.ipynb` | **Entrenada** |
 | LSTM | Kevin | `04_lstm.ipynb` | **Entrenada** |
 | Transformer | Stiven | `05_transformer.ipynb` | **Entrenada** |
 
 La RNN fue la primera, y con ella dejamos montado todo lo que las demás redes comparten: el ciclo de entrenamiento, la evaluación, el guardado de resultados y las figuras. Esta guía explica esas piezas, muestra cómo quedó la RNN y resume lo que cada uno tiene que tener en cuenta para hacer su red. La guía de la fase 1 (`guia_proyecto.html`) sigue siendo la referencia para los datos, el pipeline y las líneas base.
 
-En pocas palabras, la RNN pronostica muy bien la demanda (MAPE de 2,24 % en validación, contra 3,83 % del mejor naive) pero todavía no le gana al naive diario en el precio (37,2 % contra 20,3 %). La TCN es un poco menos precisa en demanda (2,49 %), pero en precio baja el error a 27,4 % y es la primera red que supera al naive diario en RMSE y R² del precio. La LSTM cumple en demanda (3,10 %) y en precio queda en 32,4 %, mejor que la RNN. El Transformer también cumple en demanda (2,80 %) y en el precio mejora a la RNN (31,2 %), pero tampoco le gana al naive diario. Los detalles están en las secciones [-@sec-resultados], [-@sec-resultados-tcn], [-@sec-resultados-lstm] y [-@sec-resultados-transformer].
+En pocas palabras, la RNN pronostica muy bien la demanda (MAPE de 2,24 % en validación, contra 3,83 % del mejor naive) pero todavía no le gana al naive diario en el precio (37,2 % contra 20,3 %). La TCN es un poco menos precisa en demanda (2,49 %), pero en precio baja el error a 27,4 % y es la primera red que supera al naive diario en RMSE y R² del precio. La LSTM cumple en demanda (3,10 %) y en precio queda en 32,4 %, mejor que la RNN. El Transformer también cumple en demanda (2,80 %) y en el precio mejora a la RNN (31,2 %), pero tampoco le gana al naive diario. La GRU es la de mejor precio (23,6 %), con una demanda de 2,41 %, y le gana al naive diario en RMSE y R² del precio en validación y en prueba. Las dos redes que pasan a la fase 3 son la GRU y la TCN. Los detalles están en las secciones [-@sec-resultados], [-@sec-resultados-tcn], [-@sec-resultados-gru], [-@sec-resultados-lstm] y [-@sec-resultados-transformer].
 
 # Cómo está organizada la fase 2 {#sec-organizacion}
 
@@ -412,6 +412,137 @@ La TCN confirma lo que habían sugerido las versiones evaluadas: lo que más ayu
 
 También sobreajusta muy rápido: la mejor época fue la segunda. Si la TCN pasa a la fase 3, lo primero sería regularizarla más.
 
+# La arquitectura GRU {#sec-gru}
+
+## Cómo funciona una GRU
+
+La GRU (*Gated Recurrent Unit*) también recorre la semana hora por hora, pero controla con dos compuertas cuánto del estado anterior conserva y cuánto reemplaza con la información de la hora nueva:
+
+$$
+\begin{aligned}
+\mathbf{z}_t &= \sigma\left(\mathbf{W}_z \mathbf{x}_t + \mathbf{U}_z \mathbf{h}_{t-1} + \mathbf{b}_z\right) && \text{actualización} \\
+\mathbf{r}_t &= \sigma\left(\mathbf{W}_r \mathbf{x}_t + \mathbf{U}_r \mathbf{h}_{t-1} + \mathbf{b}_r\right) && \text{reinicio} \\
+\tilde{\mathbf{h}}_t &= \tanh\left(\mathbf{W}_h \mathbf{x}_t + \mathbf{U}_h (\mathbf{r}_t \odot \mathbf{h}_{t-1}) + \mathbf{b}_h\right) \\
+\mathbf{h}_t &= (1 - \mathbf{z}_t) \odot \mathbf{h}_{t-1} + \mathbf{z}_t \odot \tilde{\mathbf{h}}_t
+\end{aligned}
+$$
+
+La compuerta de reinicio decide cuánto del estado anterior se usa para calcular el candidato $\tilde{\mathbf{h}}_t$, y la de actualización mezcla el estado anterior con ese candidato. Es una versión más simple de la LSTM: no tiene una memoria aparte ni compuerta de salida, así que tiene tres bloques de pesos por capa en lugar de cuatro, pero conserva la idea de actualizar el estado sumando, lo que ayuda a que el gradiente llegue a las horas lejanas.
+
+## Planteamiento GRU
+
+La GRU sola resumiría la semana en un vector, como la RNN y la LSTM. Para evitarlo, la red combina tres cosas: el estado final de la GRU, un mecanismo de **atención** que deja que cada hora de mañana busque en la semana las horas que le sirven, y los valores observados de demanda y precio en la misma hora de ayer y de la semana pasada.
+
+```{mermaid}
+flowchart TD
+    P["pasado<br/>(lote, 168, 16)"] --> G["GRU de 2 capas, 48 unidades"]
+    G --> SQ["salidas de las 168 horas<br/>(lote, 168, 48)"]
+    G --> M["último estado oculto<br/>(lote, 24, 48), repetido"]
+    F["futuro<br/>(lote, 24, 9)"] --> Q["consulta 57 → 32"]
+    M --> Q
+    SQ --> K["clave 48 → 32"]
+    Q --> AT["atención: cada hora de mañana<br/>pondera las 168 horas"]
+    K --> AT
+    SQ --> AT
+    AT --> CX["contexto<br/>(lote, 24, 48)"]
+    P --> V["demanda y precio de ayer y de<br/>la semana pasada (lote, 24, 4)"]
+    CX --> C["concatenar por hora<br/>(lote, 24, 109)"]
+    M --> C
+    F --> C
+    V --> C
+    C --> D["Densa 64 + ReLU + Dropout 0,15<br/>(la misma para las 24 horas)"]
+    D --> S["Densa 2<br/>(lote, 24, 2)"]
+```
+
+1. **Codificador recurrente.** Dos capas `nn.GRU` de 48 unidades, con *dropout* de 0,15 entre ellas, recorren las 168 horas. Se guardan las salidas de todas las horas y el último estado oculto de la segunda capa.
+2. **Consulta de cada hora de mañana.** El último estado se repite para las 24 horas y se le pega el calendario de cada una. Una capa lineal con tanh lo convierte en un vector de 32 números.
+3. **Atención.** Las 168 salidas de la GRU se proyectan a 32 números (las claves). Cada hora de mañana compara su consulta con las 168 claves, el *softmax* convierte esos puntajes en pesos y el contexto de esa hora es el promedio ponderado de las 168 salidas. Así, las 24 horas de mañana ya no comparten un mismo resumen: cada una arma el suyo.
+4. **Valores de ayer y de la semana pasada.** A cada hora se le pegan la demanda y el precio observados en la misma hora de ayer y de hace 168 horas, que son justo los datos que usan los dos naive.
+5. **Cabeza densa compartida.** Una red de 64 neuronas procesa cada hora (contexto, último estado, calendario y los cuatro valores observados) y entrega sus 2 salidas.
+
+| Bloque | Parámetros |
+|---|---|
+| Capa GRU 1 ($3 \cdot (16 \cdot 48 + 48 \cdot 48 + 2 \cdot 48)$) | 9.504 |
+| Capa GRU 2 ($3 \cdot (48 \cdot 48 + 48 \cdot 48 + 2 \cdot 48)$) | 14.112 |
+| Consulta 57 → 32 | 1.856 |
+| Clave 48 → 32 (sin sesgo) | 1.536 |
+| Densa 109 → 64 | 7.040 |
+| Densa 64 → 2 | 130 |
+| **Total** | **34.178** |
+
+Los hiperparámetros por defecto están en `gru.HIPERPARAMETROS`:
+
+```python
+HIPERPARAMETROS = {"oculto": 48, "capas": 2, "dropout": 0.15, "atencion": 32, "cabeza": 64,
+                   "corregir_naive": False}
+```
+
+Es la red más pequeña de las cinco (34.178 parámetros). Igual que en el Transformer, la opción `corregir_naive` permite sumar la salida al naive de cada serie, y se deja en `False` para que la red prediga el valor completo.
+
+## Limitaciones conocidas
+
+- **Es la más lenta por época.** La GRU procesa las 168 horas en fila, igual que la RNN y la LSTM, y además calcula la atención sobre todas ellas. En CPU cada época tardó entre 4 y 7 minutos.
+- **Sobreajusta desde la mitad del entrenamiento.** Después de la séptima época la validación deja de mejorar mientras el entrenamiento sigue bajando.
+
+# Resultados de la GRU {#sec-resultados-gru}
+
+## Entrenamiento
+
+| | |
+|---|---|
+| Dispositivo | CPU (PyTorch 2.5.1) |
+| Épocas entrenadas | 15 (paró por *early stopping*) |
+| Mejor época | 7 |
+| Mejor pérdida de validación | 0,1404 |
+| Pérdida de entrenamiento en la mejor época | 0,0785 |
+| Tiempo total | unos 79 minutos (entre 250 y 416 s por época) |
+
+![Pérdida por época de la GRU. La línea punteada marca la mejor época.](reports/figuras/f2_03_gru_curvas.png)
+
+La validación bajó durante siete épocas, de 0,2131 a 0,1404, la menor de las cinco redes. Desde ahí se mantuvo entre 0,145 y 0,155 y en la última época subió a 0,163, mientras el entrenamiento seguía bajando hasta 0,064. El sobreajuste aparece más tarde y es más suave que en la TCN, la LSTM y el Transformer, que tuvieron su mejor época en la segunda o la tercera.
+
+## Métricas
+
+| Modelo | Partición | MAE demanda [kWh] | MAPE demanda [%] | R² demanda | MAE precio [COP/kWh] | MAPE precio [%] | RMSE precio [COP/kWh] | R² precio |
+|---|---|---|---|---|---|---|---|---|
+| **GRU** | val | **71.664** | **2,41** | **0,86** | 52,6 | 23,55 | **99,8** | **0,58** |
+| Naive $m=168$ | val | 111.762 | 3,83 | 0,54 | 81,7 | 37,45 | 136,1 | 0,22 |
+| Naive $m=24$ | val | 194.136 | 6,72 | −0,08 | **48,5** | **20,34** | 111,8 | 0,48 |
+| **GRU** | test | **78.160** | **2,59** | **0,87** | 65,7 | 16,39 | **105,6** | **0,89** |
+| Naive $m=168$ | test | 121.129 | 4,06 | 0,49 | 126,5 | 34,67 | 182,2 | 0,68 |
+| Naive $m=24$ | test | 194.817 | 6,67 | 0,07 | **56,1** | **14,86** | 111,1 | 0,88 |
+
+- **Demanda: cumple.** El MAPE baja de 3,83 % a 2,41 % en validación y de 4,06 % a 2,59 % en prueba. En validación queda muy cerca de la RNN (2,24 %) y en prueba es la mejor de las cinco.
+- **Precio: no cumple la meta en MAPE, pero es la red que más se acerca.** En validación queda en 23,6 %, contra 27,4 % de la TCN y 20,3 % del naive diario. En prueba, 16,4 % contra 14,9 %.
+- **En RMSE y R² del precio le gana al naive diario en validación y en prueba** (99,8 frente a 111,8 y 105,6 frente a 111,1 en RMSE). Es la única red que lo supera en las dos particiones.
+
+## Pronóstico contra lo observado
+
+![Primeros 14 días de validación (julio de 2025).](reports/figuras/f2_03_gru_pronostico_val.png)
+
+![Primeros 14 días de prueba (enero de 2026).](reports/figuras/f2_03_gru_pronostico_test.png)
+
+En la **demanda**, sigue de cerca el ciclo diario y las caídas de los domingos en validación, con pequeñas diferencias en los máximos de algunos días laborales, como el 7 de julio. En prueba se queda por debajo en los primeros días de enero, sobre todo el 1 y el 2, y luego se acerca al valor real.
+
+En el **precio**:
+
+- **Sigue el nivel base y reacciona a algunos picos.** En validación se mantiene pegada al precio de 100 a 200 COP/kWh y sube a 260–400 COP/kWh en varios de los picos de julio, aunque no llega a los 840 reales. También acompaña los escalones de 200 COP/kWh del 10 y el 11 de julio.
+- **Tiene algunas falsas alarmas.** El 3 y el 10 de julio pronostica picos de 280 y 400 COP/kWh que no ocurrieron.
+- **En prueba sigue el cambio de nivel.** La primera semana de enero acompaña el precio de 300 a 350 COP/kWh, con picos nocturnos de más. Cuando el precio cae, a partir del 8 de enero, el pronóstico también baja, aunque se queda entre 130 y 250 COP/kWh cuando el real está cerca de 110.
+
+## Error por hora del día
+
+![MAE por hora del día en validación, GRU contra los dos naive.](reports/figuras/f2_03_gru_error_por_hora.png)
+
+- En **demanda**, la GRU tiene menos error que los dos naive en todas las horas, con el menor error a las 06:00.
+- En **precio**, va muy cerca del naive diario todo el día. Queda un poco por encima en la madrugada y la mañana, lo iguala entre las 15:00 y las 18:00 y queda por debajo a las 19:00 y las 21:00, que son las horas con más error para los tres modelos.
+
+## Conclusión GRU
+
+La GRU es la red con mejor precio de la fase 2 y mantiene una demanda casi tan buena como la de la RNN. Lo que la diferencia de la RNN y la LSTM no es solo la recurrencia con compuertas: cada hora de mañana arma su propio contexto con la atención y tiene a la mano los valores de la misma hora de ayer y de la semana pasada, que es la misma idea que le dio la ventaja a la TCN.
+
+Todavía no le gana al naive diario en MAPE del precio, pero sí en RMSE y R², lo que indica que se equivoca menos cuando hay picos. El costo es el tiempo: fue la más lenta de las cinco, algo a tener en cuenta en la fase 3.
+
 # La arquitectura LSTM {#sec-lstm}
 
 ## Cómo funciona una LSTM
@@ -650,7 +781,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 |---|---|---|---|---|---|---|
 | RNN | 67.180 | 2,24 | 0,87 | 78,8 | 37,21 | 0,32 |
 | TCN | 73.563 | 2,49 | 0,86 | 57,7 | 27,43 | 0,56 |
-| GRU | | | | | | |
+| GRU | 71.664 | 2,41 | 0,86 | 52,6 | 23,55 | 0,58 |
 | LSTM | 93.362 | 3,10 | 0,80 | 70,1 | 32,38 | 0,33 |
 | Transformer | 81.872 | 2,80 | 0,81 | 69,5 | 31,25 | 0,43 |
 | *Naive $m=168$* | *111.762* | *3,83* | *0,54* | *81,7* | *37,45* | *0,22* |
@@ -662,7 +793,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 |---|---|---|---|---|---|---|
 | RNN | 82.929 | 2,70 | 0,86 | 127,5 | 29,08 | 0,69 |
 | TCN | 83.670 | 2,74 | 0,86 | 83,1 | 20,68 | 0,85 |
-| GRU | | | | | | |
+| GRU | 78.160 | 2,59 | 0,87 | 65,7 | 16,39 | 0,89 |
 | LSTM | 112.338 | 3,64 | 0,77 | 108,6 | 22,28 | 0,74 |
 | Transformer | 106.807 | 3,54 | 0,79 | 93,8 | 24,02 | 0,81 |
 | *Naive $m=168$* | *121.129* | *4,06* | *0,49* | *126,5* | *34,67* | *0,68* |
@@ -674,7 +805,7 @@ Cuando estén las cinco redes, juntamos los `metricas.csv` de `results/fase2/` y
 |---|---|---|---|---|
 | RNN | 13 | 21 | 55.728 | ~59 min (CPU) |
 | TCN | 2 | 10 | 40.098 | ~43 min (CPU) |
-| GRU | | | | |
+| GRU | 7 | 15 | 34.178 | ~79 min (CPU) |
 | LSTM | 3 | 11 | 96.432 | ~53 min (CPU) |
 | Transformer | 3 | 11 | 131.586 | ~25 min (CPU) |
 
@@ -690,6 +821,20 @@ El criterio se fija antes de tener los resultados de las cinco redes, para que l
 4. **La prueba no se usa para escoger.** Las métricas de prueba se reportan para confirmar que la elección se sostiene con datos de 2026, pero no cambian el resultado. Si una red escogida se comporta mucho peor en prueba que en validación, se reporta y se discute, pero no se reemplaza.
 
 Como información complementaria, y no como criterio, se reportan también el RMSE y el R² del precio, que muestran qué tan bien maneja cada red los picos, y el tiempo de entrenamiento, que pesa en la fase 3 porque ahí cada red se va a entrenar muchas veces.
+
+## Resultado
+
+| Red | MAPE demanda val [%] | Cumple el requisito | MAPE precio val [%] | Puesto |
+|---|---|---|---|---|
+| GRU | 2,41 | Sí | 23,55 | **1** |
+| TCN | 2,49 | Sí | 27,43 | **2** |
+| Transformer | 2,80 | Sí | 31,25 | 3 |
+| LSTM | 3,10 | Sí | 32,38 | 4 |
+| RNN | 2,24 | Sí | 37,21 | 5 |
+
+Las cinco redes cumplen el requisito de demanda. Por MAPE de precio en validación, pasan a la fase 3 la **GRU** y la **TCN**. La diferencia entre la segunda y la tercera es de 3,8 puntos, así que no hace falta el desempate.
+
+La prueba confirma la elección: la GRU y la TCN también tienen el menor MAPE de precio en 2026 (16,4 % y 20,7 %), y son las dos con mayor R² del precio en las dos particiones.
 
 # Referencias
 
