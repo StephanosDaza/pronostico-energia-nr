@@ -1,0 +1,21 @@
+{
+  "modelo": {
+    "oculto": 48,
+    "capas": 2,
+    "dropout": 0.15,
+    "atencion": 32,
+    "cabeza": 64
+  },
+  "entrenamiento": {
+    "optimizador": "adam",
+    "lr": 0.001,
+    "epocas": 50,
+    "batch": 256,
+    "paciencia": 8,
+    "clip": 1.0
+  },
+  "parametros_entrenables": 34178,
+  "mejor_epoca": 8,
+  "epocas_ejecutadas": 16,
+  "tiempo_total_segundos": 622.207524061203
+}

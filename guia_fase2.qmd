@@ -3,7 +3,7 @@ title: "Pronóstico de demanda no regulada y precio de bolsa en Colombia"
 subtitle: "Guía de la fase 2 · Redes neuronales"
 author:
   - Esteban Daza Palomino
-  - Isabel Suárez Londoño
+  - Sara Isabel Suárez Londoño
   - Sara Jurado Giraldo
   - Kevin González Duarte
   - Stiven Saldarriaga Mayorga
