@@ -1,0 +1,9 @@
+,,GRU fase 2,GRU fase 3 (media),GRU fase 3 (desv.),naive m=24,naive m=168
+val,demanda_MAPE_%,2.409,2.041,0.017,6.719,3.833
+val,precio_MAPE_%,23.551,20.905,0.777,20.337,37.449
+val,precio_RMSE,99.808,96.684,0.399,111.795,136.077
+val,precio_R2,0.582,0.608,0.003,0.476,0.224
+test,demanda_MAPE_%,2.589,2.301,0.095,6.671,4.06
+test,precio_MAPE_%,16.386,15.307,1.244,14.863,34.665
+test,precio_RMSE,105.631,107.87,11.136,111.123,182.249
+test,precio_R2,0.893,0.887,0.024,0.881,0.68
