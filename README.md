@@ -1,12 +1,12 @@
-# Pronóstico de demanda no regulada y precio de bolsa en Colombia
+# Pronóstico de Demanda No Regulada y Precio de bolsa en Colombia
 
 Proyecto del curso Optimización e Inteligencia Artificial (UNAL, 2026).
 
 Pronóstico horario, para las 24 horas del día siguiente, de la demanda de energía de usuarios no regulados y del precio de bolsa nacional, con datos de XM (2022-01-01 a 2026-08-31).
 
-La documentación de la fase 1 está en **`guia_proyecto.html`** (fuente: `guia_proyecto.qmd`) y la de la fase 2 en **`guia_fase2.html`** (fuente: `guia_fase2.qmd`). Las instrucciones del curso están en `docs/guia_proyecto_final_curso.pdf`.
+La documentación de la fase 1 está en **`guia_proyecto.html`** (fuente: `guia_proyecto.qmd`), la de la fase 2 en **`guia_fase2.html`** (fuente: `guia_fase2.qmd`) y la de la fase 3 en **`guia_fase3.html`** (fuente: `guia_fase3.qmd`). El documento final del proyecto y presenta el modelo ganador es **`entregable_final_proyecto.html`** (fuente: `entregable_final_proyecto.qmd`). Las instrucciones del curso están en `docs/guia_proyecto_final_curso.pdf`.
 
-## Puesta en marcha (VS Code)
+## Ejecución (VS Code)
 
 Todos trabajamos con **Python 3.11**, **VS Code** y las versiones fijadas en `requirements.txt`. Cada uno crea su propio entorno virtual (`.venv/`), que no se sube a git.
 
